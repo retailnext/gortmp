@@ -6,27 +6,27 @@ import (
 	"github.com/zhangpeihao/goamf"
 )
 
-type OutboundStreamHandler interface {
-	OnPlayStart(stream OutboundStream)
-	OnPublishStart(stream OutboundStream)
+type ClientStreamHandler interface {
+	OnPlayStart(stream ClientStream)
+	OnPublishStart(stream ClientStream)
 }
 
 // Message stream:
 //
 // A logical channel of communication that allows the flow of
 // messages.
-type outboundStream struct {
+type clientStream struct {
 	id            uint32
-	conn          OutboundConn
+	conn          ClientConn
 	chunkStreamID uint32
-	handler       OutboundStreamHandler
+	handler       ClientStreamHandler
 	bufferLength  uint32
 }
 
 // A RTMP logical stream on connection.
-type OutboundStream interface {
-	OutboundPublishStream
-	OutboundPlayStream
+type ClientStream interface {
+	ClientPublishStream
+	ClientPlayStream
 	// ID
 	ID() uint32
 	// Pause
@@ -38,7 +38,7 @@ type OutboundStream interface {
 	// Received messages
 	Received(message *Message) (handlered bool)
 	// Attach handler
-	Attach(handler OutboundStreamHandler)
+	Attach(handler ClientStreamHandler)
 	// Publish audio data
 	PublishAudioData(data []byte, deltaTimestamp uint32) error
 	// Publish video data
@@ -50,7 +50,7 @@ type OutboundStream interface {
 }
 
 // A publish stream
-type OutboundPublishStream interface {
+type ClientPublishStream interface {
 	// Publish
 	Publish(name, t string) (err error)
 	// Send audio data
@@ -60,7 +60,7 @@ type OutboundPublishStream interface {
 }
 
 // A play stream
-type OutboundPlayStream interface {
+type ClientPlayStream interface {
 	// Play
 	Play(streamName string, start, duration *uint32, reset *bool) (err error)
 	// Seeks the kerframe closedst to the specified location.
@@ -68,22 +68,22 @@ type OutboundPlayStream interface {
 }
 
 // ID
-func (stream *outboundStream) ID() uint32 {
+func (stream *clientStream) ID() uint32 {
 	return stream.id
 }
 
 // Pause
-func (stream *outboundStream) Pause() error {
+func (stream *clientStream) Pause() error {
 	return errors.New("Unimplemented")
 }
 
 // Resume
-func (stream *outboundStream) Resume() error {
+func (stream *clientStream) Resume() error {
 	return errors.New("Unimplemented")
 }
 
 // Close
-func (stream *outboundStream) Close() {
+func (stream *clientStream) Close() {
 	var err error
 	cmd := &Command{
 		IsFlex:        true,
@@ -102,19 +102,19 @@ func (stream *outboundStream) Close() {
 }
 
 // Send audio data
-func (stream *outboundStream) SendAudioData(data []byte) error {
+func (stream *clientStream) SendAudioData(data []byte) error {
 	return errors.New("Unimplemented")
 }
 
 // Send video data
-func (stream *outboundStream) SendVideoData(data []byte) error {
+func (stream *clientStream) SendVideoData(data []byte) error {
 	return errors.New("Unimplemented")
 }
 
 // Seeks the kerframe closedst to the specified location.
-func (stream *outboundStream) Seek(offset uint32) {}
+func (stream *clientStream) Seek(offset uint32) {}
 
-func (stream *outboundStream) Publish(streamName, howToPublish string) (err error) {
+func (stream *clientStream) Publish(streamName, howToPublish string) (err error) {
 	conn := stream.conn.Conn()
 	// Create publish command
 	cmd := &Command{
@@ -141,7 +141,7 @@ func (stream *outboundStream) Publish(streamName, howToPublish string) (err erro
 	return conn.Send(message)
 }
 
-func (stream *outboundStream) Play(streamName string, start, duration *uint32, reset *bool) (err error) {
+func (stream *clientStream) Play(streamName string, start, duration *uint32, reset *bool) (err error) {
 	conn := stream.conn.Conn()
 	// Keng-die: in stream transaction ID always been 0
 	// Create play command
@@ -194,7 +194,7 @@ func (stream *outboundStream) Play(streamName string, start, duration *uint32, r
 	return nil
 }
 
-func (stream *outboundStream) Call(name string, customParameters ...interface{}) (err error) {
+func (stream *clientStream) Call(name string, customParameters ...interface{}) (err error) {
 	conn := stream.conn.Conn()
 	// Create play command
 	cmd := &Command{
@@ -229,7 +229,7 @@ func (stream *outboundStream) Call(name string, customParameters ...interface{})
 	return nil
 }
 
-func (stream *outboundStream) Received(message *Message) bool {
+func (stream *clientStream) Received(message *Message) bool {
 	if message.Type == VIDEO_TYPE || message.Type == AUDIO_TYPE {
 		return false
 	}
@@ -241,21 +241,21 @@ func (stream *outboundStream) Received(message *Message) bool {
 			_, err = message.Buf.ReadByte()
 			if err != nil {
 				logger.ModulePrintln(LOG_LEVEL_WARNING,
-					"outboundStream::Received() Read first in flex commad err:", err)
+					"clientStream::Received() Read first in flex commad err:", err)
 				return true
 			}
 		}
 		cmd.Name, err = amf.ReadString(message.Buf)
 		if err != nil {
 			logger.ModulePrintln(LOG_LEVEL_WARNING,
-				"outboundStream::Received() AMF0 Read name err:", err)
+				"clientStream::Received() AMF0 Read name err:", err)
 			return true
 		}
 		var transactionID float64
 		transactionID, err = amf.ReadDouble(message.Buf)
 		if err != nil {
 			logger.ModulePrintln(LOG_LEVEL_WARNING,
-				"outboundStream::Received() AMF0 Read transactionID err:", err)
+				"clientStream::Received() AMF0 Read transactionID err:", err)
 			return true
 		}
 		cmd.TransactionID = uint32(transactionID)
@@ -264,7 +264,7 @@ func (stream *outboundStream) Received(message *Message) bool {
 			object, err = amf.ReadValue(message.Buf)
 			if err != nil {
 				logger.ModulePrintln(LOG_LEVEL_WARNING,
-					"outboundStream::Received() AMF0 Read object err:", err)
+					"clientStream::Received() AMF0 Read object err:", err)
 				return true
 			}
 			cmd.Objects = append(cmd.Objects, object)
@@ -278,13 +278,13 @@ func (stream *outboundStream) Received(message *Message) bool {
 			return stream.onTimeCoordInfo(cmd)
 		default:
 			logger.ModulePrintf(LOG_LEVEL_WARNING,
-				"outboundStream::Received() Unknown command: %s\n", cmd.Name)
+				"clientStream::Received() Unknown command: %s\n", cmd.Name)
 		}
 	}
 	return false
 }
 
-func (stream *outboundStream) onStatus(cmd *Command) bool {
+func (stream *clientStream) onStatus(cmd *Command) bool {
 	logger.ModulePrintf(LOG_LEVEL_TRACE, "onStatus: %+v\n", cmd)
 	code := ""
 	if len(cmd.Objects) >= 2 {
@@ -313,34 +313,34 @@ func (stream *outboundStream) onStatus(cmd *Command) bool {
 	return false
 }
 
-func (stream *outboundStream) onMetaData(cmd *Command) bool {
+func (stream *clientStream) onMetaData(cmd *Command) bool {
 	return false
 }
 
-func (stream *outboundStream) onTimeCoordInfo(cmd *Command) bool {
+func (stream *clientStream) onTimeCoordInfo(cmd *Command) bool {
 	return false
 }
 
-func (stream *outboundStream) Attach(handler OutboundStreamHandler) {
+func (stream *clientStream) Attach(handler ClientStreamHandler) {
 	stream.handler = handler
 }
 
 // Publish audio data
-func (stream *outboundStream) PublishAudioData(data []byte, deltaTimestamp uint32) (err error) {
+func (stream *clientStream) PublishAudioData(data []byte, deltaTimestamp uint32) (err error) {
 	message := NewMessage(stream.chunkStreamID, AUDIO_TYPE, stream.id, AUTO_TIMESTAMP, data)
 	message.Timestamp = deltaTimestamp
 	return stream.conn.Send(message)
 }
 
 // Publish video data
-func (stream *outboundStream) PublishVideoData(data []byte, deltaTimestamp uint32) (err error) {
+func (stream *clientStream) PublishVideoData(data []byte, deltaTimestamp uint32) (err error) {
 	message := NewMessage(stream.chunkStreamID, VIDEO_TYPE, stream.id, AUTO_TIMESTAMP, data)
 	message.Timestamp = deltaTimestamp
 	return stream.conn.Send(message)
 }
 
 // Publish data
-func (stream *outboundStream) PublishData(dataType uint8, data []byte, deltaTimestamp uint32) (err error) {
+func (stream *clientStream) PublishData(dataType uint8, data []byte, deltaTimestamp uint32) (err error) {
 	message := NewMessage(stream.chunkStreamID, dataType, stream.id, AUTO_TIMESTAMP, data)
 	message.Timestamp = deltaTimestamp
 	return stream.conn.Send(message)

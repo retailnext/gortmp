@@ -13,24 +13,24 @@ import (
 )
 
 const (
-	OUTBOUND_CONN_STATUS_CLOSE            = uint(0)
-	OUTBOUND_CONN_STATUS_HANDSHAKE_OK     = uint(1)
-	OUTBOUND_CONN_STATUS_CONNECT          = uint(2)
-	OUTBOUND_CONN_STATUS_CONNECT_OK       = uint(3)
-	OUTBOUND_CONN_STATUS_CREATE_STREAM    = uint(4)
-	OUTBOUND_CONN_STATUS_CREATE_STREAM_OK = uint(5)
+	CLIENT_CONN_STATUS_CLOSE            = uint(0)
+	CLIENT_CONN_STATUS_HANDSHAKE_OK     = uint(1)
+	CLIENT_CONN_STATUS_CONNECT          = uint(2)
+	CLIENT_CONN_STATUS_CONNECT_OK       = uint(3)
+	CLIENT_CONN_STATUS_CREATE_STREAM    = uint(4)
+	CLIENT_CONN_STATUS_CREATE_STREAM_OK = uint(5)
 )
 
-// A handler for outbound connection
-type OutboundConnHandler interface {
+// A handler for client connection
+type ClientConnHandler interface {
 	ConnHandler
 	// When connection status changed
-	OnStatus(obConn OutboundConn)
+	OnStatus(obConn ClientConn)
 	// On stream created
-	OnStreamCreated(obConn OutboundConn, stream OutboundStream)
+	OnStreamCreated(obConn ClientConn, stream ClientStream)
 }
 
-type OutboundConn interface {
+type ClientConn interface {
 	// Connect an appliction on FMS after handshake.
 	Connect(extendedParameters ...interface{}) (err error)
 	// Create a stream
@@ -54,19 +54,19 @@ type OutboundConn interface {
 //
 // A RTMP connection(based on TCP) to RTMP server(FMS or crtmpserver).
 // In one connection, we can create many chunk streams.
-type outboundConn struct {
+type clientConn struct {
 	url          string
 	rtmpURL      RtmpURL
 	status       uint
 	err          error
-	handler      OutboundConnHandler
+	handler      ClientConnHandler
 	conn         Conn
 	transactions map[uint32]string
-	streams      map[uint32]OutboundStream
+	streams      map[uint32]ClientStream
 }
 
 // Connect to FMS server, and finish handshake process
-func Dial(url string, handler OutboundConnHandler, maxChannelNumber int) (OutboundConn, error) {
+func Dial(url string, handler ClientConnHandler, maxChannelNumber int) (ClientConn, error) {
 	rtmpURL, err := ParseURL(url)
 	if err != nil {
 		return nil, err
@@ -95,13 +95,13 @@ func Dial(url string, handler OutboundConnHandler, maxChannelNumber int) (Outbou
 	if err == nil {
 		logger.ModulePrintln(LOG_LEVEL_DEBUG, "Handshake OK")
 
-		obConn := &outboundConn{
+		obConn := &clientConn{
 			url:          url,
 			rtmpURL:      rtmpURL,
 			handler:      handler,
-			status:       OUTBOUND_CONN_STATUS_HANDSHAKE_OK,
+			status:       CLIENT_CONN_STATUS_HANDSHAKE_OK,
 			transactions: make(map[uint32]string),
-			streams:      make(map[uint32]OutboundStream),
+			streams:      make(map[uint32]ClientStream),
 		}
 		obConn.handler.OnStatus(obConn)
 		obConn.conn = NewConn(c, br, bw, obConn, maxChannelNumber)
@@ -112,7 +112,7 @@ func Dial(url string, handler OutboundConnHandler, maxChannelNumber int) (Outbou
 }
 
 // Connect to FMS server, and finish handshake process
-func NewOutbounConn(c net.Conn, url string, handler OutboundConnHandler, maxChannelNumber int) (OutboundConn, error) {
+func NewOutbounConn(c net.Conn, url string, handler ClientConnHandler, maxChannelNumber int) (ClientConn, error) {
 	rtmpURL, err := ParseURL(url)
 	if err != nil {
 		return nil, err
@@ -123,20 +123,20 @@ func NewOutbounConn(c net.Conn, url string, handler OutboundConnHandler, maxChan
 
 	br := bufio.NewReader(c)
 	bw := bufio.NewWriter(c)
-	obConn := &outboundConn{
+	obConn := &clientConn{
 		url:          url,
 		rtmpURL:      rtmpURL,
 		handler:      handler,
-		status:       OUTBOUND_CONN_STATUS_HANDSHAKE_OK,
+		status:       CLIENT_CONN_STATUS_HANDSHAKE_OK,
 		transactions: make(map[uint32]string),
-		streams:      make(map[uint32]OutboundStream),
+		streams:      make(map[uint32]ClientStream),
 	}
 	obConn.conn = NewConn(c, br, bw, obConn, maxChannelNumber)
 	return obConn, nil
 }
 
 // Connect an appliction on FMS after handshake.
-func (obConn *outboundConn) Connect(extendedParameters ...interface{}) (err error) {
+func (obConn *clientConn) Connect(extendedParameters ...interface{}) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
@@ -212,16 +212,16 @@ func (obConn *outboundConn) Connect(extendedParameters ...interface{}) (err erro
 		Buf:           buf,
 	}
 	connectMessage.Dump("connect")
-	obConn.status = OUTBOUND_CONN_STATUS_CONNECT
+	obConn.status = CLIENT_CONN_STATUS_CONNECT
 	return obConn.conn.Send(connectMessage)
 }
 
 // Close a connection
-func (obConn *outboundConn) Close() {
+func (obConn *clientConn) Close() {
 	for _, stream := range obConn.streams {
 		stream.Close()
 	}
-	obConn.status = OUTBOUND_CONN_STATUS_CLOSE
+	obConn.status = CLIENT_CONN_STATUS_CLOSE
 	go func() {
 		time.Sleep(time.Second)
 		obConn.conn.Close()
@@ -229,17 +229,17 @@ func (obConn *outboundConn) Close() {
 }
 
 // URL to connect
-func (obConn *outboundConn) URL() string {
+func (obConn *clientConn) URL() string {
 	return obConn.url
 }
 
 // Connection status
-func (obConn *outboundConn) Status() (uint, error) {
+func (obConn *clientConn) Status() (uint, error) {
 	return obConn.status, obConn.err
 }
 
 // Callback when recieved message. Audio & Video data
-func (obConn *outboundConn) OnReceived(conn Conn, message *Message) {
+func (obConn *clientConn) OnReceived(conn Conn, message *Message) {
 	stream, found := obConn.streams[message.StreamID]
 	if found {
 		if !stream.Received(message) {
@@ -251,7 +251,7 @@ func (obConn *outboundConn) OnReceived(conn Conn, message *Message) {
 }
 
 // Callback when recieved message.
-func (obConn *outboundConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
+func (obConn *clientConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 	command.Dump()
 	switch command.Name {
 	case "_result":
@@ -266,9 +266,9 @@ func (obConn *outboundConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 						if ok && code == RESULT_CONNECT_OK {
 							// Connect OK
 							obConn.conn.SetWindowAcknowledgementSize()
-							obConn.status = OUTBOUND_CONN_STATUS_CONNECT_OK
+							obConn.status = CLIENT_CONN_STATUS_CONNECT_OK
 							obConn.handler.OnStatus(obConn)
-							obConn.status = OUTBOUND_CONN_STATUS_CREATE_STREAM
+							obConn.status = CLIENT_CONN_STATUS_CREATE_STREAM
 							obConn.CreateStream()
 						}
 					}
@@ -280,16 +280,16 @@ func (obConn *outboundConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 						newChunkStream, err := obConn.conn.CreateMediaChunkStream()
 						if err != nil {
 							logger.ModulePrintf(LOG_LEVEL_WARNING,
-								"outboundConn::ReceivedRtmpCommand() CreateMediaChunkStream err:", err)
+								"clientConn::ReceivedRtmpCommand() CreateMediaChunkStream err:", err)
 							return
 						}
-						stream := &outboundStream{
+						stream := &clientStream{
 							id:            uint32(streamID),
 							conn:          obConn,
 							chunkStreamID: newChunkStream.ID,
 						}
 						obConn.streams[stream.ID()] = stream
-						obConn.status = OUTBOUND_CONN_STATUS_CREATE_STREAM_OK
+						obConn.status = CLIENT_CONN_STATUS_CREATE_STREAM_OK
 						obConn.handler.OnStatus(obConn)
 						obConn.handler.OnStreamCreated(obConn, stream)
 					}
@@ -312,14 +312,14 @@ func (obConn *outboundConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 }
 
 // Connection closed
-func (obConn *outboundConn) OnClosed(conn Conn) {
-	obConn.status = OUTBOUND_CONN_STATUS_CLOSE
+func (obConn *clientConn) OnClosed(conn Conn) {
+	obConn.status = CLIENT_CONN_STATUS_CLOSE
 	obConn.handler.OnStatus(obConn)
 	obConn.handler.OnClosed(conn)
 }
 
 // Create a stream
-func (obConn *outboundConn) CreateStream() (err error) {
+func (obConn *clientConn) CreateStream() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
@@ -353,13 +353,13 @@ func (obConn *outboundConn) CreateStream() (err error) {
 }
 
 // Send a message
-func (obConn *outboundConn) Send(message *Message) error {
+func (obConn *clientConn) Send(message *Message) error {
 	return obConn.conn.Send(message)
 }
 
 // Calls a command or method on Flash Media Server
 // or on an application server running Flash Remoting.
-func (obConn *outboundConn) Call(name string, customParameters ...interface{}) (err error) {
+func (obConn *clientConn) Call(name string, customParameters ...interface{}) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
@@ -397,6 +397,6 @@ func (obConn *outboundConn) Call(name string, customParameters ...interface{}) (
 }
 
 // Get network connect instance
-func (obConn *outboundConn) Conn() Conn {
+func (obConn *clientConn) Conn() Conn {
 	return obConn.conn
 }

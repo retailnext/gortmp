@@ -20,13 +20,13 @@ import (
 type Conn interface {
 	Close()
 	Send(message *Message) error
-	CreateChunkStream(ID uint32) (*OutboundChunkStream, error)
+	CreateChunkStream(ID uint32) (*ClientChunkStream, error)
 	CloseChunkStream(ID uint32)
 	NewTransactionID() uint32
-	CreateMediaChunkStream() (*OutboundChunkStream, error)
+	CreateMediaChunkStream() (*ClientChunkStream, error)
 	CloseMediaChunkStream(id uint32)
 	SetStreamBufferSize(streamId uint32, size uint32)
-	OutboundChunkStream(id uint32) (chunkStream *OutboundChunkStream, found bool)
+	ClientChunkStream(id uint32) (chunkStream *ClientChunkStream, found bool)
 	InboundChunkStream(id uint32) (chunkStream *InboundChunkStream, found bool)
 	SetWindowAcknowledgementSize()
 	SetPeerBandwidth(peerBandwidth uint32, limitType byte)
@@ -49,7 +49,7 @@ type ConnHandler interface {
 // To maintain all chunk streams in one network connection.
 type conn struct {
 	// Chunk streams
-	outChunkStreams map[uint32]*OutboundChunkStream
+	outChunkStreams map[uint32]*ClientChunkStream
 	inChunkStreams  map[uint32]*InboundChunkStream
 
 	// High-priority send message buffer.
@@ -121,7 +121,7 @@ func NewConn(c net.Conn, br *bufio.Reader, bw *bufio.Writer, handler ConnHandler
 		c:                           c,
 		br:                          br,
 		bw:                          bw,
-		outChunkStreams:             make(map[uint32]*OutboundChunkStream),
+		outChunkStreams:             make(map[uint32]*ClientChunkStream),
 		inChunkStreams:              make(map[uint32]*InboundChunkStream),
 		highPriorityMessageQueue:    make(chan *Message, DEFAULT_HIGH_PRIORITY_BUFFER_SIZE),
 		middlePriorityMessageQueue:  make(chan *Message, DEFAULT_MIDDLE_PRIORITY_BUFFER_SIZE),
@@ -138,11 +138,11 @@ func NewConn(c net.Conn, br *bufio.Reader, bw *bufio.Writer, handler ConnHandler
 		mediaChunkStreamIDAllocator: make([]bool, maxChannelNumber),
 	}
 	// Create "Protocol control chunk stream"
-	conn.outChunkStreams[CS_ID_PROTOCOL_CONTROL] = NewOutboundChunkStream(CS_ID_PROTOCOL_CONTROL)
+	conn.outChunkStreams[CS_ID_PROTOCOL_CONTROL] = NewClientChunkStream(CS_ID_PROTOCOL_CONTROL)
 	// Create "Command message chunk stream"
-	conn.outChunkStreams[CS_ID_COMMAND] = NewOutboundChunkStream(CS_ID_COMMAND)
+	conn.outChunkStreams[CS_ID_COMMAND] = NewClientChunkStream(CS_ID_COMMAND)
 	// Create "User control chunk stream"
-	conn.outChunkStreams[CS_ID_USER_CONTROL] = NewOutboundChunkStream(CS_ID_USER_CONTROL)
+	conn.outChunkStreams[CS_ID_USER_CONTROL] = NewClientChunkStream(CS_ID_USER_CONTROL)
 	go conn.sendLoop()
 	go conn.readLoop()
 	return conn
@@ -158,7 +158,7 @@ func (conn *conn) sendMessage(message *Message) {
 		return
 	}
 
-	header := chunkStream.NewOutboundHeader(message)
+	header := chunkStream.NewClientHeader(message)
 	_, err := header.Write(conn.bw)
 	if err != nil {
 		conn.error(err, "sendMessage write header")
@@ -452,12 +452,12 @@ func (conn *conn) Send(message *Message) error {
 	return nil
 }
 
-func (conn *conn) CreateChunkStream(id uint32) (*OutboundChunkStream, error) {
+func (conn *conn) CreateChunkStream(id uint32) (*ClientChunkStream, error) {
 	chunkStream, found := conn.outChunkStreams[id]
 	if found {
 		return nil, errors.New("Chunk stream existed")
 	}
-	chunkStream = NewOutboundChunkStream(id)
+	chunkStream = NewClientChunkStream(id)
 	conn.outChunkStreams[id] = chunkStream
 	return chunkStream, nil
 }
@@ -466,7 +466,7 @@ func (conn *conn) CloseChunkStream(id uint32) {
 	delete(conn.outChunkStreams, id)
 }
 
-func (conn *conn) CreateMediaChunkStream() (*OutboundChunkStream, error) {
+func (conn *conn) CreateMediaChunkStream() (*ClientChunkStream, error) {
 	var newChunkStreamID uint32
 	conn.mediaChunkStreamIDAllocatorLocker.Lock()
 	for index, occupited := range conn.mediaChunkStreamIDAllocator {
@@ -491,7 +491,7 @@ func (conn *conn) CreateMediaChunkStream() (*OutboundChunkStream, error) {
 	return chunkSteam, nil
 }
 
-func (conn *conn) OutboundChunkStream(id uint32) (chunkStream *OutboundChunkStream, found bool) {
+func (conn *conn) ClientChunkStream(id uint32) (chunkStream *ClientChunkStream, found bool) {
 	chunkStream, found = conn.outChunkStreams[id]
 	return
 }
