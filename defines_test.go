@@ -1,9 +1,10 @@
 package gortmp
 
 import (
-	"github.com/zhangpeihao/log"
 	"testing"
 	"time"
+
+	"github.com/zhangpeihao/log"
 )
 
 type TestParseURLCase struct {

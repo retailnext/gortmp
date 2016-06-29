@@ -7,13 +7,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/zhangpeihao/goamf"
-	"github.com/zhangpeihao/log"
 	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/zhangpeihao/goamf"
+	"github.com/zhangpeihao/log"
 )
 
 // Conn
@@ -405,7 +406,6 @@ func (conn *conn) readLoop() {
 							"Unfinish message continue copy remain: %d\n", remain)
 						continue
 					}
-					break
 				}
 				netErr, ok := err.(net.Error)
 				if !ok || !netErr.Temporary() {
@@ -513,7 +513,7 @@ func (conn *conn) InboundChunkStream(id uint32) (chunkStream *InboundChunkStream
 
 func (conn *conn) CloseMediaChunkStream(id uint32) {
 	// and the id is not the index of Allocator slice
-	index := (id - 2) / 6 - 1
+	index := (id-2)/6 - 1
 	conn.mediaChunkStreamIDAllocatorLocker.Lock()
 	conn.mediaChunkStreamIDAllocator[index] = false
 	conn.mediaChunkStreamIDAllocatorLocker.Unlock()

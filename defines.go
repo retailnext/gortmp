@@ -7,13 +7,14 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/zhangpeihao/goamf"
-	"github.com/zhangpeihao/log"
 	"io"
 	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zhangpeihao/goamf"
+	"github.com/zhangpeihao/log"
 )
 
 var DefaultObjectEncoding uint = amf.AMF0
@@ -491,7 +492,6 @@ func ReadByteFromNetwork(r Reader) (b byte, err error) {
 		}
 		time.Sleep(time.Duration(retry*100) * time.Millisecond)
 	}
-	return
 }
 
 // Read bytes from network
@@ -516,7 +516,6 @@ func ReadAtLeastFromNetwork(r Reader, buf []byte, min int) (n int, err error) {
 		}
 		time.Sleep(time.Duration(retry*100) * time.Millisecond)
 	}
-	return
 }
 
 // Copy bytes from network
@@ -636,5 +635,4 @@ func FlushToNetwork(w *bufio.Writer) (err error) {
 		}
 		time.Sleep(time.Duration(retry*500) * time.Millisecond)
 	}
-	return
 }
