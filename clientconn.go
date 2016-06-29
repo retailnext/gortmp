@@ -12,23 +12,33 @@ import (
 	"github.com/zhangpeihao/goamf"
 )
 
-const (
-	CLIENT_CONN_STATUS_CLOSE            = uint(0)
-	CLIENT_CONN_STATUS_HANDSHAKE_OK     = uint(1)
-	CLIENT_CONN_STATUS_CONNECT          = uint(2)
-	CLIENT_CONN_STATUS_CONNECT_OK       = uint(3)
-	CLIENT_CONN_STATUS_CREATE_STREAM    = uint(4)
-	CLIENT_CONN_STATUS_CREATE_STREAM_OK = uint(5)
-)
+type ConnectionStatus uint
 
-// A handler for client connection
-type ClientConnHandler interface {
-	ConnHandler
-	// When connection status changed
-	OnStatus(obConn ClientConn)
-	// On stream created
-	OnStreamCreated(obConn ClientConn, stream ClientStream)
+func (s ConnectionStatus) String() string {
+	var connectionStatusNames = map[ConnectionStatus]string{
+		ConnectionStatusClose:          "StatusClose",
+		ConnectionStatusHandshakeOK:    "StatusHandshakeOK",
+		ConnectionStatusConnect:        "StatusConnect",
+		ConnectionStatusConnectOK:      "StatusConnectOK",
+		ConnectionStatusCreateStream:   "StatusCreateStream",
+		ConnectionStatusCreateStreamOK: "StatusCreateStreamOK",
+	}
+
+	if str, ok := connectionStatusNames[s]; ok {
+		return str
+	}
+
+	return "Unknown"
 }
+
+const (
+	ConnectionStatusClose          ConnectionStatus = 0
+	ConnectionStatusHandshakeOK                     = 1
+	ConnectionStatusConnect                         = 2
+	ConnectionStatusConnectOK                       = 3
+	ConnectionStatusCreateStream                    = 4
+	ConnectionStatusCreateStreamOK                  = 5
+)
 
 type ClientConn interface {
 	// Connect an appliction on FMS after handshake.
@@ -40,7 +50,7 @@ type ClientConn interface {
 	// URL to connect
 	URL() string
 	// Connection status
-	Status() (uint, error)
+	Status() (ConnectionStatus, error)
 	// Send a message
 	Send(message *Message) error
 	// Calls a command or method on Flash Media Server
@@ -48,6 +58,8 @@ type ClientConn interface {
 	Call(name string, customParameters ...interface{}) (err error)
 	// Get network connect instance
 	Conn() Conn
+	// Returns a channel of RTMPEvents
+	Events() <-chan RTMPEvent
 }
 
 // High-level interface
@@ -57,16 +69,16 @@ type ClientConn interface {
 type clientConn struct {
 	url          string
 	rtmpURL      RtmpURL
-	status       uint
+	status       ConnectionStatus
 	err          error
-	handler      ClientConnHandler
 	conn         Conn
 	transactions map[uint32]string
 	streams      map[uint32]ClientStream
+	events       chan RTMPEvent
 }
 
 // Connect to FMS server, and finish handshake process
-func Dial(url string, handler ClientConnHandler, maxChannelNumber int) (ClientConn, error) {
+func Dial(url string, maxChannelNumber int) (ClientConn, error) {
 	rtmpURL, err := ParseURL(url)
 	if err != nil {
 		return nil, err
@@ -95,24 +107,24 @@ func Dial(url string, handler ClientConnHandler, maxChannelNumber int) (ClientCo
 	if err == nil {
 		logger.ModulePrintln(LOG_LEVEL_DEBUG, "Handshake OK")
 
-		obConn := &clientConn{
+		conn := &clientConn{
 			url:          url,
 			rtmpURL:      rtmpURL,
-			handler:      handler,
-			status:       CLIENT_CONN_STATUS_HANDSHAKE_OK,
+			status:       ConnectionStatusHandshakeOK,
 			transactions: make(map[uint32]string),
 			streams:      make(map[uint32]ClientStream),
+			events:       make(chan RTMPEvent, 10),
 		}
-		obConn.handler.OnStatus(obConn)
-		obConn.conn = NewConn(c, br, bw, obConn, maxChannelNumber)
-		return obConn, nil
+		conn.sendEvent(&StatusEvent{Status: conn.status})
+		conn.conn = NewConn(c, br, bw, conn, maxChannelNumber)
+		return conn, nil
 	}
 
 	return nil, err
 }
 
 // Connect to FMS server, and finish handshake process
-func NewOutbounConn(c net.Conn, url string, handler ClientConnHandler, maxChannelNumber int) (ClientConn, error) {
+func NewOutbounConn(c net.Conn, url string, maxChannelNumber int) (ClientConn, error) {
 	rtmpURL, err := ParseURL(url)
 	if err != nil {
 		return nil, err
@@ -123,25 +135,25 @@ func NewOutbounConn(c net.Conn, url string, handler ClientConnHandler, maxChanne
 
 	br := bufio.NewReader(c)
 	bw := bufio.NewWriter(c)
-	obConn := &clientConn{
+	conn := &clientConn{
 		url:          url,
 		rtmpURL:      rtmpURL,
-		handler:      handler,
-		status:       CLIENT_CONN_STATUS_HANDSHAKE_OK,
+		status:       ConnectionStatusHandshakeOK,
 		transactions: make(map[uint32]string),
 		streams:      make(map[uint32]ClientStream),
+		events:       make(chan RTMPEvent, 10),
 	}
-	obConn.conn = NewConn(c, br, bw, obConn, maxChannelNumber)
-	return obConn, nil
+	conn.conn = NewConn(c, br, bw, conn, maxChannelNumber)
+	return conn, nil
 }
 
 // Connect an appliction on FMS after handshake.
-func (obConn *clientConn) Connect(extendedParameters ...interface{}) (err error) {
+func (conn *clientConn) Connect(extendedParameters ...interface{}) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
-			if obConn.err == nil {
-				obConn.err = err
+			if conn.err == nil {
+				conn.err = err
 			}
 		}
 	}()
@@ -150,8 +162,8 @@ func (obConn *clientConn) Connect(extendedParameters ...interface{}) (err error)
 	// Command name
 	_, err = amf.WriteString(buf, "connect")
 	CheckError(err, "Connect() Write name: connect")
-	transactionID := obConn.conn.NewTransactionID()
-	obConn.transactions[transactionID] = "connect"
+	transactionID := conn.conn.NewTransactionID()
+	conn.transactions[transactionID] = "connect"
 	_, err = amf.WriteDouble(buf, float64(transactionID))
 	CheckError(err, "Connect() Write transaction ID")
 	_, err = amf.WriteObjectMarker(buf)
@@ -159,7 +171,7 @@ func (obConn *clientConn) Connect(extendedParameters ...interface{}) (err error)
 
 	_, err = amf.WriteObjectName(buf, "app")
 	CheckError(err, "Connect() Write app name")
-	_, err = amf.WriteString(buf, obConn.rtmpURL.App())
+	_, err = amf.WriteString(buf, conn.rtmpURL.App())
 	CheckError(err, "Connect() Write app value")
 
 	_, err = amf.WriteObjectName(buf, "flashVer")
@@ -169,7 +181,7 @@ func (obConn *clientConn) Connect(extendedParameters ...interface{}) (err error)
 
 	_, err = amf.WriteObjectName(buf, "tcUrl")
 	CheckError(err, "Connect() Write tcUrl name")
-	_, err = amf.WriteString(buf, obConn.url)
+	_, err = amf.WriteString(buf, conn.url)
 	CheckError(err, "Connect() Write tcUrl value")
 
 	_, err = amf.WriteObjectName(buf, "fpad")
@@ -212,50 +224,73 @@ func (obConn *clientConn) Connect(extendedParameters ...interface{}) (err error)
 		Buf:           buf,
 	}
 	connectMessage.Dump("connect")
-	obConn.status = CLIENT_CONN_STATUS_CONNECT
-	return obConn.conn.Send(connectMessage)
+	conn.status = ConnectionStatusConnect
+	return conn.conn.Send(connectMessage)
 }
 
 // Close a connection
-func (obConn *clientConn) Close() {
-	for _, stream := range obConn.streams {
+func (conn *clientConn) Close() {
+	for _, stream := range conn.streams {
 		stream.Close()
 	}
-	obConn.status = CLIENT_CONN_STATUS_CLOSE
+	conn.status = ConnectionStatusClose
 	go func() {
 		time.Sleep(time.Second)
-		obConn.conn.Close()
+		conn.conn.Close()
 	}()
 }
 
 // URL to connect
-func (obConn *clientConn) URL() string {
-	return obConn.url
+func (conn *clientConn) URL() string {
+	return conn.url
 }
 
 // Connection status
-func (obConn *clientConn) Status() (uint, error) {
-	return obConn.status, obConn.err
+func (conn *clientConn) Status() (ConnectionStatus, error) {
+	return conn.status, conn.err
 }
 
 // Callback when recieved message. Audio & Video data
-func (obConn *clientConn) OnReceived(conn Conn, message *Message) {
-	stream, found := obConn.streams[message.StreamID]
+func (conn *clientConn) OnReceived(c Conn, message *Message) {
+	stream, found := conn.streams[message.StreamID]
+	sendEvent := false
 	if found {
 		if !stream.Received(message) {
-			obConn.handler.OnReceived(conn, message)
+			sendEvent = true
 		}
 	} else {
-		obConn.handler.OnReceived(conn, message)
+		sendEvent = true
+	}
+
+	if sendEvent {
+		switch message.Type {
+		case VIDEO_TYPE:
+			conn.sendEvent(&VideoEvent{Timestamp: message.Timestamp, Data: message.Buf})
+		case AUDIO_TYPE:
+			conn.sendEvent(&AudioEvent{Timestamp: message.Timestamp, Data: message.Buf})
+		default:
+			// This shouldn't get called. All event types should be handled
+			conn.sendEvent(&UnknownDataEvent{Message: message})
+		}
+	}
+}
+
+func (conn *clientConn) Events() <-chan RTMPEvent {
+	return conn.events
+}
+
+func (conn *clientConn) sendEvent(e interface{}) {
+	conn.events <- RTMPEvent{
+		Data: e,
 	}
 }
 
 // Callback when recieved message.
-func (obConn *clientConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
+func (conn *clientConn) OnReceivedRtmpCommand(c Conn, command *Command) {
 	command.Dump()
 	switch command.Name {
 	case "_result":
-		transaction, found := obConn.transactions[command.TransactionID]
+		transaction, found := conn.transactions[command.TransactionID]
 		if found {
 			switch transaction {
 			case "connect":
@@ -265,11 +300,11 @@ func (obConn *clientConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 						code, ok := information["code"]
 						if ok && code == RESULT_CONNECT_OK {
 							// Connect OK
-							obConn.conn.SetWindowAcknowledgementSize()
-							obConn.status = CLIENT_CONN_STATUS_CONNECT_OK
-							obConn.handler.OnStatus(obConn)
-							obConn.status = CLIENT_CONN_STATUS_CREATE_STREAM
-							obConn.CreateStream()
+							conn.conn.SetWindowAcknowledgementSize()
+							conn.status = ConnectionStatusConnectOK
+							conn.sendEvent(&StatusEvent{Status: conn.status})
+							conn.status = ConnectionStatusCreateStream
+							conn.CreateStream()
 						}
 					}
 				}
@@ -277,7 +312,7 @@ func (obConn *clientConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 				if command.Objects != nil && len(command.Objects) >= 2 {
 					streamID, ok := command.Objects[1].(float64)
 					if ok {
-						newChunkStream, err := obConn.conn.CreateMediaChunkStream()
+						newChunkStream, err := conn.conn.CreateMediaChunkStream()
 						if err != nil {
 							logger.ModulePrintf(LOG_LEVEL_WARNING,
 								"clientConn::ReceivedRtmpCommand() CreateMediaChunkStream err:", err)
@@ -285,20 +320,20 @@ func (obConn *clientConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 						}
 						stream := &clientStream{
 							id:            uint32(streamID),
-							conn:          obConn,
+							conn:          conn,
 							chunkStreamID: newChunkStream.ID,
 						}
-						obConn.streams[stream.ID()] = stream
-						obConn.status = CLIENT_CONN_STATUS_CREATE_STREAM_OK
-						obConn.handler.OnStatus(obConn)
-						obConn.handler.OnStreamCreated(obConn, stream)
+						conn.streams[stream.ID()] = stream
+						conn.status = ConnectionStatusCreateStreamOK
+						conn.sendEvent(&StatusEvent{Status: conn.status})
+						conn.sendEvent(&StreamCreatedEvent{Stream: stream})
 					}
 				}
 			}
-			delete(obConn.transactions, command.TransactionID)
+			delete(conn.transactions, command.TransactionID)
 		}
 	case "_error":
-		transaction, found := obConn.transactions[command.TransactionID]
+		transaction, found := conn.transactions[command.TransactionID]
 		if found {
 			logger.ModulePrintf(LOG_LEVEL_TRACE,
 				"Command(%d) %s error\n", command.TransactionID, transaction)
@@ -308,28 +343,28 @@ func (obConn *clientConn) OnReceivedRtmpCommand(conn Conn, command *Command) {
 		}
 	case "onBWCheck":
 	}
-	obConn.handler.OnReceivedRtmpCommand(obConn.conn, command)
+	conn.sendEvent(&CommandEvent{Command: command})
 }
 
 // Connection closed
-func (obConn *clientConn) OnClosed(conn Conn) {
-	obConn.status = CLIENT_CONN_STATUS_CLOSE
-	obConn.handler.OnStatus(obConn)
-	obConn.handler.OnClosed(conn)
+func (conn *clientConn) OnClosed(c Conn) {
+	conn.status = ConnectionStatusClose
+	conn.sendEvent(&StatusEvent{Status: conn.status})
+	conn.sendEvent(&ClosedEvent{})
 }
 
 // Create a stream
-func (obConn *clientConn) CreateStream() (err error) {
+func (conn *clientConn) CreateStream() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
-			if obConn.err == nil {
-				obConn.err = err
+			if conn.err == nil {
+				conn.err = err
 			}
 		}
 	}()
 	// Create createStream command
-	transactionID := obConn.conn.NewTransactionID()
+	transactionID := conn.conn.NewTransactionID()
 	cmd := &Command{
 		IsFlex:        false,
 		Name:          "createStream",
@@ -340,7 +375,7 @@ func (obConn *clientConn) CreateStream() (err error) {
 	buf := new(bytes.Buffer)
 	err = cmd.Write(buf)
 	CheckError(err, "createStream() Create command")
-	obConn.transactions[transactionID] = "createStream"
+	conn.transactions[transactionID] = "createStream"
 
 	message := &Message{
 		ChunkStreamID: CS_ID_COMMAND,
@@ -349,27 +384,27 @@ func (obConn *clientConn) CreateStream() (err error) {
 		Buf:           buf,
 	}
 	message.Dump("createStream")
-	return obConn.conn.Send(message)
+	return conn.conn.Send(message)
 }
 
 // Send a message
-func (obConn *clientConn) Send(message *Message) error {
-	return obConn.conn.Send(message)
+func (conn *clientConn) Send(message *Message) error {
+	return conn.conn.Send(message)
 }
 
 // Calls a command or method on Flash Media Server
 // or on an application server running Flash Remoting.
-func (obConn *clientConn) Call(name string, customParameters ...interface{}) (err error) {
+func (conn *clientConn) Call(name string, customParameters ...interface{}) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
-			if obConn.err == nil {
-				obConn.err = err
+			if conn.err == nil {
+				conn.err = err
 			}
 		}
 	}()
 	// Create command
-	transactionID := obConn.conn.NewTransactionID()
+	transactionID := conn.conn.NewTransactionID()
 	cmd := &Command{
 		IsFlex:        false,
 		Name:          name,
@@ -383,7 +418,7 @@ func (obConn *clientConn) Call(name string, customParameters ...interface{}) (er
 	buf := new(bytes.Buffer)
 	err = cmd.Write(buf)
 	CheckError(err, "Call() Create command")
-	obConn.transactions[transactionID] = name
+	conn.transactions[transactionID] = name
 
 	message := &Message{
 		ChunkStreamID: CS_ID_COMMAND,
@@ -392,11 +427,11 @@ func (obConn *clientConn) Call(name string, customParameters ...interface{}) (er
 		Buf:           buf,
 	}
 	message.Dump(name)
-	return obConn.conn.Send(message)
+	return conn.conn.Send(message)
 
 }
 
 // Get network connect instance
-func (obConn *clientConn) Conn() Conn {
-	return obConn.conn
+func (conn *clientConn) Conn() Conn {
+	return conn.conn
 }
