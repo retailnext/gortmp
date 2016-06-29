@@ -158,16 +158,13 @@ func (conn *conn) sendMessage(message *Message) {
 		return
 	}
 
-	//	message.Dump(">>>")
 	header := chunkStream.NewOutboundHeader(message)
 	_, err := header.Write(conn.bw)
 	if err != nil {
 		conn.error(err, "sendMessage write header")
 		return
 	}
-	//	header.Dump(">>>")
 	if header.MessageLength > conn.outChunkSize {
-		//		chunkStream.lastHeader = nil
 		// Split into some chunk
 		_, err = CopyNToNetwork(conn.bw, message.Buf, int64(conn.outChunkSize))
 		if err != nil {
@@ -361,7 +358,6 @@ func (conn *conn) readLoop() {
 		if remain <= conn.inChunkSize {
 			// One chunk message
 			for {
-				// n64, err = CopyNFromNetwork(message.Buf, conn.br, int64(remain))
 				n64, err = io.CopyN(message.Buf, conn.br, int64(remain))
 				if err == nil {
 					conn.inBytes += uint32(n64)
@@ -391,7 +387,6 @@ func (conn *conn) readLoop() {
 
 			remain = conn.inChunkSize
 			for {
-				// n64, err = CopyNFromNetwork(message.Buf, conn.br, int64(remain))
 				n64, err = io.CopyN(message.Buf, conn.br, int64(remain))
 				if err == nil {
 					conn.inBytes += uint32(n64)
@@ -436,8 +431,6 @@ func (conn *conn) error(err error, desc string) {
 }
 
 func (conn *conn) Close() {
-	//	panic(errors.New("Closed"))
-
 	conn.closed = true
 	conn.c.Close()
 }
@@ -522,7 +515,6 @@ func (conn *conn) NewTransactionID() uint32 {
 }
 
 func (conn *conn) received(message *Message) {
-	message.Dump("<<<")
 	tmpBuf := make([]byte, 4)
 	var err error
 	var subType byte

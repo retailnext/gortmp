@@ -257,17 +257,13 @@ const (
 )
 
 var (
-	//	FLASH_PLAYER_VERSION = []byte{0x0A, 0x00, 0x2D, 0x02}
-	FLASH_PLAYER_VERSION = []byte{0x09, 0x00, 0x7C, 0x02}
-	//FLASH_PLAYER_VERSION = []byte{0x80, 0x00, 0x07, 0x02}
-	//FLASH_PLAYER_VERSION_STRING = "LNX 10,0,32,18"
+	FLASH_PLAYER_VERSION        = []byte{0x09, 0x00, 0x7C, 0x02}
 	FLASH_PLAYER_VERSION_STRING = "LNX 9,0,124,2"
-	//FLASH_PLAYER_VERSION_STRING = "WIN 11,5,502,146"
-	SWF_URL_STRING     = "http://localhost/1.swf"
-	PAGE_URL_STRING    = "http://localhost/1.html"
-	MIN_BUFFER_LENGTH  = uint32(256)
-	FMS_VERSION        = []byte{0x04, 0x05, 0x00, 0x01}
-	FMS_VERSION_STRING = "4,5,0,297"
+	SWF_URL_STRING              = "http://localhost/1.swf"
+	PAGE_URL_STRING             = "http://localhost/1.html"
+	MIN_BUFFER_LENGTH           = uint32(256)
+	FMS_VERSION                 = []byte{0x04, 0x05, 0x00, 0x01}
+	FMS_VERSION_STRING          = "4,5,0,297"
 )
 
 const (
@@ -361,64 +357,6 @@ func ParseURL(url string) (rtmpURL RtmpURL, err error) {
 		rtmpURL.instanceName = s2[1]
 	}
 	return
-	/*
-		if len(s1) == 3 {
-			if strings.HasPrefix(s1[1], "//") && len(s1[1]) > 2 {
-				rtmpURL.host = s1[1][2:]
-				if len(rtmpURL.host) == 0 {
-					err = errors.New(fmt.Sprintf("Parse url %s error. Host is empty.", url))
-					return
-				}
-			} else {
-				err = errors.New(fmt.Sprintf("Parse url %s error. Host invalid.", url))
-				return
-			}
-			fmt.Printf("s1: %v\n", s1)
-			s2 := strings.SplitN(s1[2], "/", 3)
-			var port int
-			port, err = strconv.Atoi(s2[0])
-			if err != nil {
-				err = errors.New(fmt.Sprintf("Parse url %s error. port error: %s.", url, err.Error()))
-				return
-			}
-			if port > 65535 || port <= 0 {
-				err = errors.New(fmt.Sprintf("Parse url %s error. port error: %d.", url, port))
-				return
-			}
-			rtmpURL.port = uint16(port)
-			if len(s2) > 1 {
-				rtmpURL.app = s2[1]
-			}
-			if len(s2) > 2 {
-				rtmpURL.instanceName = s2[2]
-			}
-		} else {
-			if len(s1) < 2 {
-				err = errors.New(fmt.Sprintf("Parse url %s error. url invalid.", url))
-				return
-			}
-			// Default port
-			rtmpURL.port = 1935
-			if strings.HasPrefix(s1[1], "//") && len(s1[1]) > 2 {
-				s2 := strings.SplitN(s1[1][2:], "/", 3)
-				rtmpURL.host = s2[0]
-				if len(rtmpURL.host) == 0 {
-					err = errors.New(fmt.Sprintf("Parse url %s error. Host is empty.", url))
-					return
-				}
-				if len(s2) > 1 {
-					rtmpURL.app = s2[1]
-				}
-				if len(s2) > 2 {
-					rtmpURL.instanceName = s2[2]
-				}
-			} else {
-				err = errors.New(fmt.Sprintf("Parse url %s error. Host invalid.", url))
-				return
-			}
-		}
-		return
-	*/
 }
 
 func (rtmpUrl *RtmpURL) App() string {
@@ -430,7 +368,6 @@ func (rtmpUrl *RtmpURL) App() string {
 
 // Get timestamp
 func GetTimestamp() uint32 {
-	//return uint32(0)
 	return uint32(time.Now().UnixNano()/int64(1000000)) % MAX_TIMESTAMP
 }
 
@@ -449,8 +386,6 @@ func ReadByteFromNetwork(r Reader) (b byte, err error) {
 		if !netErr.Temporary() {
 			return
 		}
-		logger.ModulePrintln(LOG_LEVEL_DEBUG,
-			"ReadByteFromNetwork block")
 		if retry < 16 {
 			retry = retry * 2
 		}
@@ -473,8 +408,6 @@ func ReadAtLeastFromNetwork(r Reader, buf []byte, min int) (n int, err error) {
 		if !netErr.Temporary() {
 			return
 		}
-		logger.ModulePrintln(LOG_LEVEL_DEBUG,
-			"ReadAtLeastFromNetwork !!!!!!!!!!!!!!!!!!")
 		if retry < 16 {
 			retry = retry * 2
 		}
@@ -484,8 +417,6 @@ func ReadAtLeastFromNetwork(r Reader, buf []byte, min int) (n int, err error) {
 
 // Copy bytes from network
 func CopyNFromNetwork(dst Writer, src Reader, n int64) (written int64, err error) {
-	// return io.CopyN(dst, src, n)
-
 	buf := make([]byte, 4096)
 	for written < n {
 		l := len(buf)
@@ -534,8 +465,6 @@ func WriteToNetwork(w Writer, data []byte) (written int, err error) {
 		if !netErr.Temporary() {
 			return
 		}
-		logger.ModulePrintln(LOG_LEVEL_DEBUG,
-			"WriteToNetwork !!!!!!!!!!!!!!!!!!")
 		if retry < 16 {
 			retry = retry * 2
 		}
@@ -547,8 +476,6 @@ func WriteToNetwork(w Writer, data []byte) (written int, err error) {
 
 // Copy bytes to network
 func CopyNToNetwork(dst Writer, src Reader, n int64) (written int64, err error) {
-	// return io.CopyN(dst, src, n)
-
 	buf := make([]byte, 4096)
 	for written < n {
 		l := len(buf)
@@ -592,8 +519,6 @@ func FlushToNetwork(w *bufio.Writer) (err error) {
 		if !netErr.Temporary() {
 			return
 		}
-		logger.ModulePrintln(LOG_LEVEL_DEBUG,
-			"FlushToNetwork !!!!!!!!!!!!!!!!!!")
 		if retry < 16 {
 			retry = retry * 2
 		}

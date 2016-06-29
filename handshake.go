@@ -55,14 +55,6 @@ func HMACsha256(msgBytes []byte, key []byte) ([]byte, error) {
 }
 
 func CreateRandomBlock(size uint) []byte {
-	/*
-		buf := make([]byte, size)
-		for i := uint(0); i < size; i++ {
-			buf[i] = byte(rand.Int() % 256)
-		}
-		return buf
-	*/
-
 	size64 := size / uint(8)
 	buf := new(bytes.Buffer)
 	var r64 int64
@@ -114,7 +106,6 @@ func ValidateDigest(buf []byte, offset uint32, key []byte) uint32 {
 }
 
 func ImprintWithDigest(buf []byte, key []byte) uint32 {
-	//digestPos := CalcDigestPos(buf, 772, 728, 776)
 	digestPos := CalcDigestPos(buf, 8, 728, 12)
 
 	// Create temp buffer
@@ -175,7 +166,6 @@ func Handshake(c net.Conn, br *bufio.Reader, bw *bufio.Writer, timeout time.Dura
 	CheckError(err, "Handshake() Send C0")
 	c1 := CreateRandomBlock(RTMP_SIG_SIZE)
 	// Set Timestamp
-	// binary.BigEndian.PutUint32(c1, uint32(GetTimestamp()))
 	binary.BigEndian.PutUint32(c1, uint32(0))
 	// Set FlashPlayer version
 	for i := 0; i < 4; i++ {
@@ -216,9 +206,6 @@ func Handshake(c net.Conn, br *bufio.Reader, bw *bufio.Writer, timeout time.Dura
 	CheckError(err, "Handshake Read S1")
 	logger.ModulePrintf(LOG_LEVEL_DEBUG,
 		"Handshake() FMS version is %d.%d.%d.%d", s1[4], s1[5], s1[6], s1[7])
-	//	if s1[4] < 3 {
-	//		return errors.New(fmt.Sprintf("FMS version is %d.%d.%d.%d, unsupported!", s1[4], s1[5], s1[6], s1[7]))
-	//	}
 
 	// Read S2
 	if timeout > 0 {
@@ -286,7 +273,6 @@ func SHandshake(c net.Conn, br *bufio.Reader, bw *bufio.Writer, timeout time.Dur
 	CheckError(err, "SHandshake() Send S0")
 	s1 := CreateRandomBlock(RTMP_SIG_SIZE)
 	// Set Timestamp
-	// binary.BigEndian.PutUint32(s1, uint32(GetTimestamp()))
 	binary.BigEndian.PutUint32(s1, uint32(0))
 	// Set FlashPlayer version
 	for i := 0; i < 4; i++ {
