@@ -3,8 +3,6 @@ package gortmp
 import (
 	"testing"
 	"time"
-
-	"github.com/zhangpeihao/log"
 )
 
 type TestParseURLCase struct {
@@ -43,13 +41,6 @@ func compareRtmpURL(a, b RtmpURL) bool {
 		(a.port == b.port) &&
 		(a.app == b.app) &&
 		(a.instanceName == b.instanceName)
-}
-
-func InitTestLogger() {
-	if logger == nil {
-		l := log.NewLogger(".", "test", nil, 60, 3600*24, true)
-		InitLogger(l)
-	}
 }
 
 func TestParseURL(t *testing.T) {

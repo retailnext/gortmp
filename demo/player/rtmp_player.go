@@ -6,13 +6,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/zhangpeihao/goflv"
-	rtmp "github.com/zhangpeihao/gortmp"
-	"github.com/zhangpeihao/log"
 	"io"
 	"net"
 	"os"
 	"time"
+
+	"github.com/zhangpeihao/goflv"
+	rtmp "github.com/zhangpeihao/gortmp"
 )
 
 const (
@@ -77,10 +77,7 @@ func main() {
 	}
 	flag.Parse()
 
-	fmt.Printf("rtmp:%s stream:%s flv:%s\r\n", *url,*streamName,*dumpFlv)
-	l := log.NewLogger(".", "player", nil, 60, 3600*24, true)
-	rtmp.InitLogger(l)
-	defer l.Close()
+	fmt.Printf("rtmp:%s stream:%s flv:%s\r\n", *url, *streamName, *dumpFlv)
 	// Create flv file
 	if len(*dumpFlv) > 0 {
 		var err error

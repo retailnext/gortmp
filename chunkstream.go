@@ -1,9 +1,5 @@
 package gortmp
 
-import (
-	"github.com/zhangpeihao/log"
-)
-
 // Chunk stream
 //
 // A logical channel of communication that allows flow of chunks in a
@@ -100,7 +96,7 @@ func (chunkStream *OutboundChunkStream) NewOutboundHeader(message *Message) *Hea
 	} else {
 		header.ExtendedTimestamp = 0
 	}
-	logger.ModulePrintf(logHandler, log.LOG_LEVEL_DEBUG,
+	logger.ModulePrintf(LOG_LEVEL_DEBUG,
 		"OutboundChunkStream::NewOutboundHeader() header: %+v\n", header)
 	chunkStream.lastHeader = header
 	chunkStream.lastOutAbsoluteTimestamp = timestamp
