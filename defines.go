@@ -1,5 +1,5 @@
 // RTMP protocol golang implementation
-package gortmp
+package rtmpclient
 
 import (
 	"bufio"

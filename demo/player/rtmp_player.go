@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	rtmp "github.com/zhangpeihao/gortmp"
+	rtmp "github.com/retailnext/rtmpclient"
 )
 
 const (
