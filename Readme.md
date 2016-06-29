@@ -1,7 +1,7 @@
-# Golang rtmp client
+# Golang rtmp client library
 
 This is an rtmp client library implemented in go. It is forked version
-of github.com/zhangpeihao/gortmp with significant changes to public API
+of github.com/zhangpeihao/gortmp with significant changes to its public API
 made by RetailNext.
 
 # License
