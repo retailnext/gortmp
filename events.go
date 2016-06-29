@@ -1,4 +1,4 @@
-package gortmp
+package rtmpclient
 
 import "io"
 
