@@ -3,8 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -21,14 +19,6 @@ var (
 	streamName *string = flag.String("Stream", "camstream", "Stream name to play.")
 )
 
-var obConn rtmp.ClientConn
-var createStreamChan chan rtmp.ClientStream
-var videoDataSize int64
-var audioDataSize int64
-var status uint
-
-var h264StartCode = []byte{0x00, 0x00, 0x00, 0x01}
-
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "%s version[%s]\r\nUsage: %s [OPTIONS]\r\n", programName, version, os.Args[0])
@@ -36,7 +26,6 @@ func main() {
 	}
 	flag.Parse()
 
-	createStreamChan = make(chan rtmp.ClientStream)
 	fmt.Println("to dial")
 
 	var err error
@@ -64,6 +53,8 @@ func main() {
 		os.Exit(-1)
 	}
 
+	streamIDs := make([]uint32, 0)
+
 	for done := false; !done; {
 		select {
 		case msg, ok := <-conn.Events():
@@ -76,22 +67,31 @@ func main() {
 			case *rtmp.ClosedEvent:
 				fmt.Println("evt closed")
 			case *rtmp.VideoEvent:
-				n, _ := io.Copy(ioutil.Discard, ev.Data)
-				fmt.Println("evt video:", ev.Timestamp, n)
+				fmt.Println("evt video:", ev.Message.Timestamp, ev.Message.Buf.Len())
 			case *rtmp.AudioEvent:
 				fmt.Println("evt audio")
 			case *rtmp.CommandEvent:
 				fmt.Println("evt command")
+			case *rtmp.StreamBegin:
+				fmt.Println("case *rtmp.StreamBegin")
+			case *rtmp.StreamEOF:
+				fmt.Println("case *rtmp.StreamEOF", ev.StreamID, streamIDs)
+				return
+			case *rtmp.StreamDry:
+				fmt.Println("case *rtmp.StreamDry")
+			case *rtmp.StreamIsRecorded:
+				fmt.Println("case *rtmp.StreamIsRecorded")
 			case *rtmp.StreamCreatedEvent:
-				fmt.Println("evt stream created")
+				streamIDs = append(streamIDs, ev.Stream.ID())
+				fmt.Println("evt stream created", ev.Stream.ID())
 				err = ev.Stream.Play(*streamName, nil, nil, nil)
 				if err != nil {
 					fmt.Printf("Play error: %s", err.Error())
 					os.Exit(-1)
 				}
 			}
-		case <-time.After(1 * time.Second):
-			fmt.Printf("Audio size: %d bytes; Vedio size: %d bytes\n", audioDataSize, videoDataSize)
+		case <-time.After(5 * time.Second):
+			fmt.Println("No data after 5 seconds")
 			return
 		}
 	}

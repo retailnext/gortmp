@@ -1,7 +1,5 @@
 package rtmpclient
 
-import "io"
-
 type RTMPEvent struct {
 	Data interface{}
 }
@@ -14,13 +12,11 @@ type ClosedEvent struct {
 }
 
 type VideoEvent struct {
-	Timestamp uint32
-	Data      io.Reader
+	Message *Message
 }
 
 type AudioEvent struct {
-	Timestamp uint32
-	Data      io.Reader
+	Message *Message
 }
 
 type CommandEvent struct {
@@ -33,4 +29,20 @@ type StreamCreatedEvent struct {
 
 type UnknownDataEvent struct {
 	Message *Message
+}
+
+type StreamBegin struct {
+	StreamID uint32
+}
+
+type StreamEOF struct {
+	StreamID uint32
+}
+
+type StreamDry struct {
+	StreamID uint32
+}
+
+type StreamIsRecorded struct {
+	StreamID uint32
 }

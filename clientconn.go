@@ -265,13 +265,15 @@ func (conn *clientConn) OnReceived(c Conn, message *Message) {
 	if sendEvent {
 		switch message.Type {
 		case VIDEO_TYPE:
-			conn.sendEvent(&VideoEvent{Timestamp: message.Timestamp, Data: message.Buf})
+			conn.sendEvent(&VideoEvent{Message: message})
 		case AUDIO_TYPE:
-			conn.sendEvent(&AudioEvent{Timestamp: message.Timestamp, Data: message.Buf})
+			conn.sendEvent(&AudioEvent{Message: message})
 		default:
 			// This shouldn't get called. All event types should be handled
 			conn.sendEvent(&UnknownDataEvent{Message: message})
 		}
+	} else {
+		fmt.Println("other event", message.Type)
 	}
 }
 
@@ -282,6 +284,19 @@ func (conn *clientConn) Events() <-chan RTMPEvent {
 func (conn *clientConn) sendEvent(e interface{}) {
 	conn.events <- RTMPEvent{
 		Data: e,
+	}
+}
+
+func (conn *clientConn) OnReceivedRtmpControl(eventType uint16, streamID uint32, message *Message) {
+	switch eventType {
+	case EVENT_STREAM_BEGIN:
+		conn.sendEvent(&StreamBegin{StreamID: streamID})
+	case EVENT_STREAM_EOF:
+		conn.sendEvent(&StreamEOF{StreamID: streamID})
+	case EVENT_STREAM_DRY:
+		conn.sendEvent(&StreamDry{StreamID: streamID})
+	case EVENT_STREAM_IS_RECORDED:
+		conn.sendEvent(&StreamIsRecorded{StreamID: streamID})
 	}
 }
 

@@ -42,6 +42,7 @@ type ConnHandler interface {
 	OnReceivedRtmpCommand(conn Conn, command *Command)
 	// Connection closed
 	OnClosed(conn Conn)
+	OnReceivedRtmpControl(eventType uint16, streamID uint32, message *Message)
 }
 
 // conn
@@ -778,6 +779,7 @@ func (conn *conn) invokeAcknowledgement(message *Message) {
 // +---------------+--------------------------------------------------+
 func (conn *conn) invokeUserControlMessage(message *Message) {
 	var eventType uint16
+	var streamID uint32
 	err := binary.Read(message.Buf, binary.BigEndian, &eventType)
 	if err != nil {
 		logger.ModulePrintf(LOG_LEVEL_WARNING,
@@ -786,14 +788,19 @@ func (conn *conn) invokeUserControlMessage(message *Message) {
 	}
 	switch eventType {
 	case EVENT_STREAM_BEGIN:
+		err = binary.Read(message.Buf, binary.BigEndian, &streamID)
 		logger.ModulePrintln(LOG_LEVEL_TRACE, "conn::invokeUserControlMessage() EVENT_STREAM_BEGIN")
 	case EVENT_STREAM_EOF:
+		err = binary.Read(message.Buf, binary.BigEndian, &streamID)
 		logger.ModulePrintln(LOG_LEVEL_TRACE, "conn::invokeUserControlMessage() EVENT_STREAM_EOF")
 	case EVENT_STREAM_DRY:
+		err = binary.Read(message.Buf, binary.BigEndian, &streamID)
 		logger.ModulePrintln(LOG_LEVEL_TRACE, "conn::invokeUserControlMessage() EVENT_STREAM_DRY")
 	case EVENT_SET_BUFFER_LENGTH:
+		err = binary.Read(message.Buf, binary.BigEndian, &streamID)
 		logger.ModulePrintln(LOG_LEVEL_TRACE, "conn::invokeUserControlMessage() EVENT_SET_BUFFER_LENGTH")
 	case EVENT_STREAM_IS_RECORDED:
+		err = binary.Read(message.Buf, binary.BigEndian, &streamID)
 		logger.ModulePrintln(LOG_LEVEL_TRACE, "conn::invokeUserControlMessage() EVENT_STREAM_IS_RECORDED")
 	case EVENT_PING_REQUEST:
 		// Respond ping
@@ -832,6 +839,8 @@ func (conn *conn) invokeUserControlMessage(message *Message) {
 	default:
 		logger.ModulePrintf(LOG_LEVEL_TRACE, "conn::invokeUserControlMessage() Unknown user control message :0x%x\n", eventType)
 	}
+
+	conn.handler.OnReceivedRtmpControl(eventType, streamID, message)
 }
 
 func (conn *conn) invokeWindowAcknowledgementSize(message *Message) {
