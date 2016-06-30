@@ -44,7 +44,6 @@ func compareRtmpURL(a, b RtmpURL) bool {
 }
 
 func TestParseURL(t *testing.T) {
-	InitTestLogger()
 	for _, c := range testParseURLCase {
 		got, err := ParseURL(c.url)
 		if err != nil {
@@ -64,7 +63,6 @@ func TestParseURL(t *testing.T) {
 }
 
 func TestGetTimestamp(t *testing.T) {
-	InitTestLogger()
 	t1 := GetTimestamp()
 	if t1 >= MAX_TIMESTAMP {
 		t.Errorf("Got timestamp %d > Max value(%d)", t1, MAX_TIMESTAMP)
