@@ -23,12 +23,17 @@ type CommandEvent struct {
 	Command *Command
 }
 
-type StreamCreatedEvent struct {
-	Stream ClientStream
+type MetadataEvent struct {
+	AMFVersion AMFVersion
+	Message    *Message
 }
 
 type UnknownDataEvent struct {
 	Message *Message
+}
+
+type StreamCreatedEvent struct {
+	Stream ClientStream
 }
 
 type StreamBegin struct {
@@ -46,3 +51,10 @@ type StreamDry struct {
 type StreamIsRecorded struct {
 	StreamID uint32
 }
+
+type AMFVersion int
+
+const (
+	AMF0 AMFVersion = 0
+	AMF3 AMFVersion = 3
+)

@@ -268,6 +268,16 @@ func (conn *clientConn) OnReceived(c Conn, message *Message) {
 			conn.sendEvent(&VideoEvent{Message: message})
 		case AUDIO_TYPE:
 			conn.sendEvent(&AudioEvent{Message: message})
+		case DATA_AMF0:
+			conn.sendEvent(&MetadataEvent{
+				AMFVersion: AMF0,
+				Message:    message,
+			})
+		case DATA_AMF3:
+			conn.sendEvent(&MetadataEvent{
+				AMFVersion: AMF3,
+				Message:    message,
+			})
 		default:
 			// This shouldn't get called. All event types should be handled
 			conn.sendEvent(&UnknownDataEvent{Message: message})
