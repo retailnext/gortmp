@@ -77,8 +77,14 @@ type clientConn struct {
 	events       chan RTMPEvent
 }
 
-// Connect to FMS server, and finish handshake process
+// Connect to FMS server, and finish handshake process using a default instance of net.Dialer
 func Dial(url string, maxChannelNumber int) (ClientConn, error) {
+	var dialer net.Dialer
+	return DialWithDialer(&dialer, url, maxChannelNumber)
+}
+
+// Connect to FMS server, and finish handshake process
+func DialWithDialer(dialer *net.Dialer, url string, maxChannelNumber int) (ClientConn, error) {
 	rtmpURL, err := ParseURL(url)
 	if err != nil {
 		return nil, err
@@ -86,9 +92,9 @@ func Dial(url string, maxChannelNumber int) (ClientConn, error) {
 	var c net.Conn
 	switch rtmpURL.protocol {
 	case "rtmp":
-		c, err = net.Dial("tcp", fmt.Sprintf("%s:%d", rtmpURL.host, rtmpURL.port))
+		c, err = dialer.Dial("tcp", fmt.Sprintf("%s:%d", rtmpURL.host, rtmpURL.port))
 	case "rtmps":
-		c, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", rtmpURL.host, rtmpURL.port), &tls.Config{InsecureSkipVerify: true})
+		c, err = tls.DialWithDialer(dialer, "tcp", fmt.Sprintf("%s:%d", rtmpURL.host, rtmpURL.port), &tls.Config{InsecureSkipVerify: true})
 	default:
 		err = errors.New(fmt.Sprintf("Unsupport protocol %s", rtmpURL.protocol))
 	}
