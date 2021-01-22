@@ -9,13 +9,13 @@ import (
 	"net"
 	"time"
 
-	"github.com/zhangpeihao/goamf"
+	amf "github.com/zhangpeihao/goamf"
 )
 
 type ConnectionStatus uint
 
 func (s ConnectionStatus) String() string {
-	var connectionStatusNames = map[ConnectionStatus]string{
+	connectionStatusNames := map[ConnectionStatus]string{
 		ConnectionStatusClose:          "StatusClose",
 		ConnectionStatusHandshakeOK:    "StatusHandshakeOK",
 		ConnectionStatusConnect:        "StatusConnect",
@@ -125,6 +125,35 @@ func DialWithDialer(dialer *net.Dialer, url string, maxChannelNumber int) (Clien
 		conn.conn = NewConn(c, br, bw, conn, maxChannelNumber)
 		return conn, nil
 	}
+
+	return nil, err
+}
+
+func HandshakeConn(c net.Conn, url string, maxChannelNumber int) (ClientConn, error) {
+	rtmpURL, err := ParseURL(url)
+	if err != nil {
+		return nil, err
+	}
+
+	br := bufio.NewReader(c)
+	bw := bufio.NewWriter(c)
+	if err := Handshake(c, br, bw, 10*time.Second); err != nil {
+		return nil, err
+	}
+
+	logger.ModulePrintln(LOG_LEVEL_DEBUG, "Handshake OK")
+
+	conn := &clientConn{
+		url:          url,
+		rtmpURL:      rtmpURL,
+		status:       ConnectionStatusHandshakeOK,
+		transactions: make(map[uint32]string),
+		streams:      make(map[uint32]ClientStream),
+		events:       make(chan RTMPEvent, 10),
+	}
+	conn.sendEvent(&StatusEvent{Status: conn.status})
+	conn.conn = NewConn(c, br, bw, conn, maxChannelNumber)
+	return conn, nil
 
 	return nil, err
 }
@@ -459,7 +488,6 @@ func (conn *clientConn) Call(name string, customParameters ...interface{}) (err 
 	}
 	message.Dump(name)
 	return conn.conn.Send(message)
-
 }
 
 // Get network connect instance
